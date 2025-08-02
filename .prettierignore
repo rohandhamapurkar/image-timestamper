@@ -1,0 +1,8 @@
+node_modules
+*.log
+dist
+build
+coverage
+.nyc_output
+*.min.js
+package-lock.json
