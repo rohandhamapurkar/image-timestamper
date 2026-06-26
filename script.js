@@ -2,6 +2,15 @@ const fs = require('fs').promises;
 const path = require('path');
 const sharp = require('sharp');
 
+function escapePangoText(text) {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
 async function addModifiedTimeToImage(inputPath, outputPath) {
   try {
     // Get file stats to retrieve modified time
@@ -29,50 +38,47 @@ async function addModifiedTimeToImage(inputPath, outputPath) {
     const padding = 20;
     const fontSize = Math.max(16, Math.min(metadata.width / 30, 48)); // Responsive font size
 
-    // Calculate text dimensions for proper background sizing
-    const textWidth = timestampLabel.length * fontSize * 0.52; // Balanced text width
-    const textHeight = fontSize;
+    // Render text first, then place it using the real rasterized dimensions.
     const bgPadding = 7; // Balanced padding inside the background rectangle
+    const textOverlay = sharp({
+      text: {
+        text: `<span foreground="black">${escapePangoText(timestampLabel)}</span>`,
+        font: `Arial Bold ${Math.round(fontSize)}px`,
+        rgba: true,
+        wrap: 'none',
+      },
+    });
+    const textMetadata = await textOverlay.metadata();
+    const textBuffer = await textOverlay.png().toBuffer();
 
-    // Create SVG text overlay with white background
-    const textSvg = `
-      <svg width="${metadata.width}" height="${metadata.height}">
-        <defs>
-          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="black" flood-opacity="0.3"/>
-          </filter>
-        </defs>
-        <!-- White background rectangle -->
-        <rect x="${metadata.width - padding - textWidth - bgPadding * 2}" 
-              y="${metadata.height - padding - textHeight - bgPadding}" 
-              width="${textWidth + bgPadding * 2}" 
-              height="${textHeight + bgPadding * 2}" 
-              fill="white" 
-              fill-opacity="0.95"
-              rx="4" 
-              ry="4"
-              filter="url(#shadow)"/>
-        <!-- Black text -->
-        <text x="${metadata.width - padding - bgPadding}" 
-              y="${metadata.height - padding - bgPadding / 2}" 
-              font-family="Arial, sans-serif" 
-              font-size="${fontSize}" 
-              fill="black" 
-              font-weight="bold"
-              text-anchor="end" 
-              dominant-baseline="baseline">
-          ${timestampLabel}
-        </text>
-      </svg>
-    `;
+    const backgroundWidth = textMetadata.width + bgPadding * 2;
+    const backgroundHeight = textMetadata.height + bgPadding * 2;
+    const overlayLeft = metadata.width - padding - backgroundWidth;
+    const overlayTop = metadata.height - padding - backgroundHeight;
+
+    const backgroundBuffer = await sharp({
+      create: {
+        width: backgroundWidth,
+        height: backgroundHeight,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 0.95 },
+      },
+    })
+      .png()
+      .toBuffer();
 
     // Apply the text overlay to the image
     await image
       .composite([
         {
-          input: Buffer.from(textSvg),
-          top: 0,
-          left: 0,
+          input: backgroundBuffer,
+          top: overlayTop,
+          left: overlayLeft,
+        },
+        {
+          input: textBuffer,
+          top: overlayTop + bgPadding,
+          left: overlayLeft + bgPadding,
         },
       ])
       .jpeg({ quality: 90 }) // Adjust quality as needed
