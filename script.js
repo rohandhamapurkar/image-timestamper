@@ -17,7 +17,9 @@ async function addModifiedTimeToImage(inputPath, outputPath) {
       minute: '2-digit',
       second: '2-digit',
       hour12: false,
+      timeZone: 'UTC',
     });
+    const timestampLabel = `${timeString} UTC+0000`;
 
     // Get image metadata
     const image = sharp(inputPath);
@@ -28,7 +30,7 @@ async function addModifiedTimeToImage(inputPath, outputPath) {
     const fontSize = Math.max(16, Math.min(metadata.width / 30, 48)); // Responsive font size
 
     // Calculate text dimensions for proper background sizing
-    const textWidth = timeString.length * fontSize * 0.52; // Balanced text width
+    const textWidth = timestampLabel.length * fontSize * 0.52; // Balanced text width
     const textHeight = fontSize;
     const bgPadding = 7; // Balanced padding inside the background rectangle
 
@@ -59,7 +61,7 @@ async function addModifiedTimeToImage(inputPath, outputPath) {
               font-weight="bold"
               text-anchor="end" 
               dominant-baseline="baseline">
-          ${timeString}
+          ${timestampLabel}
         </text>
       </svg>
     `;
@@ -77,7 +79,7 @@ async function addModifiedTimeToImage(inputPath, outputPath) {
       .toFile(outputPath);
 
     console.log(`✅ Successfully added timestamp to image: ${outputPath}`);
-    console.log(`📅 Modified time: ${timeString}`);
+    console.log(`📅 Modified time: ${timestampLabel}`);
   } catch (error) {
     console.error(`❌ Error processing image: ${error.message}`);
     throw error;
